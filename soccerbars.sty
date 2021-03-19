@@ -1,0 +1,305 @@
+%%% soccerbars.sty version 0.7
+%%%
+%%% Word-sized tallies of association football results
+%%% using multivariate sparklines based on Gestalt theory (=gestaltlines)
+%%%
+%%% Copyright 2021 Ulrik Brandes (ETH Zurich)
+%%% ========================================================================
+%%% LICENCE:
+%%% This file may be distributed under the terms of the LaTeX Project Public
+%%% License, as described in lppl.txt in the base LaTeX distribution.
+%%% Either version 1.3 or, at your option, any later version.
+%%% ========================================================================
+%%% ubrandes@ethz.ch
+
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{soccerbars}[2021/03/14 v0.7 Soccerbars]
+
+
+%%% ========================================================================
+%%% options
+%%% ========================================================================
+% twogoalline: extra lines above and below zero line
+% zerodots:    mark clean sheets with a small dot
+% outlined:    instead of changing color brightness, mark away games by outlining
+
+\newif\if@twogoalline
+\DeclareOption{twogoalline}{\@twogoallinetrue}
+\providecommand\sbTwoGoalLine{\@twogoallinetrue}
+\providecommand\sbNoTwoGoalLine{\@twogoallinefalse}
+
+\newif\if@zerodots
+\DeclareOption{zerodots}{\@zerodotstrue}
+\providecommand\sbZeroDots{\@zerodotstrue}
+\providecommand\sbNoZeroDots{\@zerodotsfalse}
+
+\newif\if@outlined
+\DeclareOption{outlined}{\@outlinedtrue}
+\providecommand\sbOutlined{\@outlinedtrue}
+\providecommand\sbNotOutlined{\@outlinedfalse}
+
+\DeclareOption*{\PackageWarning{soccerbars}{Unknown option ‘\CurrentOption’}}
+
+\newif\if@away
+\newif\if@goalless
+
+\ProcessOptions\relax
+
+
+
+%%% ========================================================================
+%%% package loading
+%%% ========================================================================
+
+\RequirePackage{etoolbox}
+\RequirePackage{csvsimple}
+\RequirePackage{tikz}\usetikzlibrary{backgrounds}
+
+
+%%% ========================================================================
+%%% settings
+%%% ========================================================================
+
+\newcommand{\sb@colormodifier}[2][66]{%
+  \edef\sb@awaycolor{\if@outlined\relax\else!#1!#2\fi}
+}
+\providecommand\sbAwayDarker{\sb@colormodifier{black}}
+\providecommand\sbAwayBrighter{\sb@colormodifier{white}}
+\providecommand\sbAwayKeepColor{\def\sb@awaycolor{}}
+
+\providecommand{\sbSettings}[7][*]{%
+ \def\soccerbar@thickness{#2ex}%
+ \def\soccerbar@zerodot{#3*0.5*\soccerbar@thickness}% diameter -> radius
+ \def\soccerbar@zerolinewidth{#4}%
+ \def\soccerbar@slant{#5}%
+ \def\soccerbar@spacing{#6}%
+ \def\soccerbar@padding{#7}%
+ \def\soccerbar@awaymark{#1}%
+}
+
+\providecommand{\sbDefaults}{%
+ \sbSettings{0.18}{0.6}{0.2}{14}{0.8}{0.2}%
+ \sbAwayBrighter%
+}
+
+% -- set
+\sbDefaults
+
+
+%%% ========================================================================
+%%% single result
+%%% ========================================================================
+
+\newcommand{\soccerbar@height}[1]{% -- loosely based on frequency of scores
+  \ifdim#1pt<0.5pt 0\else       % dimensions instead of integers for robustness
+  \ifdim#1pt<1.5pt 1\else       
+  \ifdim#1pt<2.5pt 1.7\else
+  \ifdim#1pt<3.5pt 2.25\else
+  \ifdim#1pt<4.5pt 2.65\else
+  \ifdim#1pt<5.5pt 2.95\else
+  \ifdim#1pt<6.5pt 3.20\else
+  \ifdim#1pt<7.5pt 3.40\else
+  \ifdim#1pt<8.5pt 3.60\else 3.75\fi\fi\fi\fi\fi\fi\fi\fi\fi
+} 
+
+
+\newcommand{\soccerbar@zerodots}[2]{%
+  \if@zerodots\relax
+    \fill
+      \ifdim#1pt<0.5pt (0,1) +(0,-\soccerbar@zerodot) circle (\soccerbar@zerodot)\fi
+      \ifdim#2pt<0.5pt (0,-1) +(0,\soccerbar@zerodot) circle (\soccerbar@zerodot)\fi
+     ;
+  \fi
+}
+
+\newcommand{\soccerbar@putzerodot}{\fill (0,0) circle (\soccerbar@zerodot);}
+
+\newcommand{\soccerbar@dot}[2][1]{% -- dot for a 0-0 draw
+  \fill[color=#2] (0,0) circle [radius=#1*\soccerbar@thickness];
+}
+
+
+\newcommand{\soccerbar@line}[4][1]{%
+  % -- tilt: win = -1 (forward leaning), draw = 0 (vertical), loss = +1 (backward leaning)
+  \def\sb@tilt{0}
+  \ifdim#3pt>#4pt\def\sb@tilt{-1}\fi
+  \ifdim#3pt<#4pt\def\sb@tilt{1}\fi
+
+  \def\sb@upperend{\soccerbar@height{#3}}   % table look-up of y-level for this number of goals
+  \def\sb@lowerend{-\soccerbar@height{#4}}
+  \ifnum\sb@tilt=0\relax\else               % clip tilted lines, shorten for outline style
+    \clip[overlay] (-2,{\sb@lowerend+0.2*(1-#1)}) rectangle (2,{\sb@upperend-0.2*(1-#1)});
+  \fi
+  \draw[
+        rotate around={\sb@tilt*\soccerbar@slant:(0,0)},
+        line width=#1*\soccerbar@thickness, 
+        shorten < =0.5*\soccerbar@thickness,  
+        shorten > =0.5*\soccerbar@thickness, 
+        line cap=round,
+        color=#2
+       ] (0,{\sb@lowerend-abs(\sb@tilt)}) -- (0,{\sb@upperend+abs(\sb@tilt)});
+}
+
+
+\tikzset{pics/score/.style n args={3}{code={%
+  % #1, #2: goals for / against
+  %     #3: 0 if match was played at home
+  \ifnum#3>0 \@awaytrue\else\@awayfalse\fi
+
+ \if\relax#1\relax % "goals for" empty => match not played
+   \soccerbar@putzerodot % alternative would be \soccerbar@zerodots{0}{0}
+ \else
+
+  % -- dots for scoreless sides?
+  \soccerbar@zerodots{#1}{#2}
+
+  % -- goalless draw?
+  \@goallessfalse
+  \ifdim#1pt<0.5pt
+    \ifdim#2pt<0.5pt
+      \@goallesstrue
+    \fi
+  \fi
+
+  % -- dot for goalless draw, line otherwise
+  \if@goalless
+    \soccerbar@dot{.}
+    \if@outlined\if@away
+      \soccerbar@dot[0.5]{white}      % !!! some time in the future this should be transparent
+    \fi\fi
+  \else
+    \soccerbar@line{.}{#1}{#2}
+    \if@outlined\if@away
+      \soccerbar@line[0.3]{white}{#1}{#2} % !!! some time in the future this should be transparent
+    \fi\fi
+  \fi
+
+ \fi % not yet played (i.e., #1 empty)
+}}}
+
+
+%%% ========================================================================
+%%% soccerbarenv environment (optional argument: default color)
+%%% ========================================================================
+% \score = \home
+% \home[color]{goals for}{goals against}
+% \away[color]{goals against}{goals for}
+
+\newcommand{\@score}[4]
+{\path (soccerbar@end) ++(\soccerbar@spacing,0)
+       pic[color=#1] {score={#2}{#3}{#4}}
+       coordinate (soccerbar@end);
+}
+
+\providecommand{\home}[3][.]{\@score{#1}{#2}{#3}{0}}
+\providecommand{\away}[3][.]{\@score{#1\sb@awaycolor}{#3}{#2}{1}}
+\let\score\home
+
+\newenvironment{soccerbarenv}[1][.]
+{%
+ \begin{tikzpicture}[x=0.5ex, y=0.5ex, baseline=-0.5ex, color=#1]
+   \coordinate (soccerbar@end) at (\soccerbar@padding,0);
+}
+{%
+   \path (soccerbar@end) ++(\soccerbar@spacing,0) ++(\soccerbar@padding,0) coordinate (soccerbar@end);
+   \def\sb@twogoals{\soccerbar@height{2}}
+   \useasboundingbox (soccerbar@end) +(0,\sb@twogoals) rectangle (0,-\sb@twogoals);
+
+   % -- add baseline(s)
+   \begin{scope}[on background layer]
+    \draw[color=.,line width=\soccerbar@zerolinewidth*\soccerbar@thickness]
+      (0,0) -- (soccerbar@end);
+
+    \if@twogoalline
+      \draw[color=.,line width=0.5*\soccerbar@zerolinewidth*\soccerbar@thickness]
+        (soccerbar@end) +(0,\sb@twogoals) -- (0,\sb@twogoals)
+        (soccerbar@end) +(0,-\sb@twogoals) -- (0,-\sb@twogoals);
+    \fi
+   \end{scope}
+ \end{tikzpicture}%
+}
+
+
+%%% ========================================================================
+%%% soccerbar command 
+%%% ========================================================================
+% \soccerbar[color]{<score>,...,<score>} where
+% <score> = (2-1)  for win at home
+% <score> = (2-1)* for loss away
+
+% -- split scores into goals for and against, swap if starred (=away match)
+\def\soccerbar@score(#1-#2)#3\relax{%
+  \if\soccerbar@awaymark\detokenize{#3}
+    pic[color=.\sb@awaycolor] {score={#2}{#1}{1}} % away
+  \else
+    pic {score={#1}{#2}{0}} % home
+  \fi
+}
+
+\providecommand{\soccerbar}[2][.]
+{\edef\soccerbar@matches{#2}%     % -- prepare argument for use in foreach
+ \begin{soccerbarenv}[#1]
+   \path[overlay] (soccerbar@end)
+     \foreach \match in \soccerbar@matches 
+      { ++(\soccerbar@spacing,0) \expandafter\soccerbar@score\match\relax }
+     coordinate (soccerbar@end)
+   ;
+ \end{soccerbarenv}%
+}
+
+
+
+%%% ========================================================================
+%%% soccerbar from csv file 
+%%% ========================================================================
+% file and column headers:
+% \sbCSVnames[color header]{filename}{hometeam}{awayteam}{homegoals}{awaygoals}
+% draw soccerbar:
+% \csvsoccerbar[color]{team}{first matchday}{last matchday}
+
+\providecommand{\sbCSVnames}[6][\relax]{%
+  \if#1\relax
+    \def\sbcsv@color{\relax}%
+    \csvnames{sbcsv@colorcolumn}{}%
+  \else
+    \csvnames{sbcsv@colorcolumn}{#1=\sbcsv@color}%
+  \fi
+  \def\sbcsv@filename{#2}
+  \csvstyle{soccerbar@style}{%
+    column names={%
+     #3=\sbcsv@hometeam,
+     #4=\sbcsv@awayteam,
+     #5=\sbcsv@homegoals,
+     #6=\sbcsv@awaygoals},
+    sbcsv@colorcolumn
+  }%
+}
+
+\providecommand{\csvsoccerbar}[4][.]{%
+  \begin{soccerbarenv}[#1]
+    \csvreader[soccerbar@style,
+               filter expr={    test{\ifcsvstrcmp{\sbcsv@hometeam}{#2}} 
+                             or test{\ifcsvstrcmp{\sbcsv@awayteam}{#2}}
+                           }
+              ]{\sbcsv@filename}{}
+     {\ifboolexpr{test{\ifnumcomp{\value{csvrow}}{<}{#3}}
+               or test{\ifnumcomp{\value{csvrow}}{>}{#4}}}{}
+      {\ifcsvstrcmp{\sbcsv@hometeam}{#2}
+        {\if\sbcsv@color\relax\home{\sbcsv@homegoals}{\sbcsv@awaygoals}
+                          \else\home[\sbcsv@color]{\sbcsv@homegoals}{\sbcsv@awaygoals}
+         \fi
+        }
+        {\if\sbcsv@color\relax\away{\sbcsv@homegoals}{\sbcsv@awaygoals}
+                         \else\away[\sbcsv@color]{\sbcsv@homegoals}{\sbcsv@awaygoals}
+         \fi
+        }
+      }
+     }
+    \whileboolexpr{test{\ifnumcomp{\value{csvrow}}{<}{#4}}}
+     {\stepcounter{csvrow}\score{}{}} % empty scores for proper length of soccerbar
+  \end{soccerbarenv}%
+}
+
+% =================================================================
+\endinput
