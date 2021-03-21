@@ -1,7 +1,7 @@
 # soccerbars
-A LaTeX package for word-sized tallies <img src="banners/lfc-2020-red.png" width="140em" height="25em" align="top"> of association football results. Suitable for use in league tables and reporting. Can be enlarged for historic achievements:
+A LaTeX package for word-sized tallies <img src="figs/lfc-2020-red.png" width="140em" height="25em" align="top"> of association football results. Suitable for use in league tables and reporting. Can be enlarged for historic achievements:
 
-![LFC 2019/2020](banners/lfc-2020.png)
+![LFC 2019/2020](figs/lfc-2020.png)
 
 
 ## Using the Package
