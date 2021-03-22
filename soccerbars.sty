@@ -47,7 +47,6 @@
 \ProcessOptions\relax
 
 
-
 %%% ========================================================================
 %%% package loading
 %%% ========================================================================
@@ -61,17 +60,14 @@
 %%% settings
 %%% ========================================================================
 
-\newcommand{\sb@colormodifier}[2][66]{%
-  \edef\sb@awaycolor{\if@outlined\relax\else!#1!#2\fi}
-}
-\providecommand\sbAwayDarker{\sb@colormodifier{black}}
-\providecommand\sbAwayBrighter{\sb@colormodifier{white}}
-\providecommand\sbAwayKeepColor{\def\sb@awaycolor{}}
+\providecommand\sbAwayDarker{\def\sb@colormodifier{!66!black}}
+\providecommand\sbAwayBrighter{\def\sb@colormodifier{!66!white}}
+\providecommand\sbAwayKeepColor{\def\sb@colormodifier{}}
 
 \providecommand{\sbSettings}[7][*]{%
  \def\soccerbar@thickness{#2ex}%
- \def\soccerbar@zerodot{#3*0.5*\soccerbar@thickness}% diameter -> radius
- \def\soccerbar@zerolinewidth{#4}%
+ \def\soccerbar@zerodot{#3*0.5*\soccerbar@thickness}%     diameter -> radius
+ \def\soccerbar@zerolinewidth{#4*\soccerbar@thickness}%
  \def\soccerbar@slant{#5}%
  \def\soccerbar@spacing{#6}%
  \def\soccerbar@padding{#7}%
@@ -91,8 +87,9 @@
 %%% single result
 %%% ========================================================================
 
+% -- convert score into height
 \newcommand{\soccerbar@height}[1]{% -- loosely based on frequency of scores
-  \ifdim#1pt<0.5pt 0\else       % dimensions instead of integers for robustness
+  \ifdim#1pt<0.5pt 0\else         % (dimensions instead of integers for robustness)
   \ifdim#1pt<1.5pt 1\else       
   \ifdim#1pt<2.5pt 1.7\else
   \ifdim#1pt<3.5pt 2.25\else
@@ -104,32 +101,42 @@
 } 
 
 
-\newcommand{\soccerbar@zerodots}[2]{%
+% -- a small dot for each team that did not score
+\newcommand{\soccerbar@zerodots}[3][.]{%
   \if@zerodots\relax
-    \fill
-      \ifdim#1pt<0.5pt (0,1) +(0,-\soccerbar@zerodot) circle (\soccerbar@zerodot)\fi
-      \ifdim#2pt<0.5pt (0,-1) +(0,\soccerbar@zerodot) circle (\soccerbar@zerodot)\fi
+    \fill[color=#1]
+      \ifdim#2pt<0.5pt (0,1) +(0,-\soccerbar@zerodot) circle (\soccerbar@zerodot)\fi
+      \ifdim#3pt<0.5pt (0,-1) +(0,\soccerbar@zerodot) circle (\soccerbar@zerodot)\fi
      ;
   \fi
 }
 
-\newcommand{\soccerbar@putzerodot}{\fill (0,0) circle (\soccerbar@zerodot);}
 
-\newcommand{\soccerbar@dot}[2][1]{% -- dot for a 0-0 draw
+% -- a small dot for a match that has not been played
+\newcommand{\soccerbar@putzerodot}[1][.]{\fill[color=#1] (0,0) circle (\soccerbar@zerodot);}
+
+
+% -- a large dot for a goalless draw
+\newcommand{\soccerbar@dot}[2][1]{%
   \fill[color=#2] (0,0) circle [radius=#1*\soccerbar@thickness];
 }
 
 
+% -- a tally for a win, draw, or loss with at least one goal
 \newcommand{\soccerbar@line}[4][1]{%
-  % -- tilt: win = -1 (forward leaning), draw = 0 (vertical), loss = +1 (backward leaning)
-  \def\sb@tilt{0}
-  \ifdim#3pt>#4pt\def\sb@tilt{-1}\fi
-  \ifdim#3pt<#4pt\def\sb@tilt{1}\fi
+  \def\sb@tilt{0}                       % draw (vertical)
+  \ifdim#3pt>#4pt\def\sb@tilt{-1}\fi    % win  (forward leaning)
+  \ifdim#3pt<#4pt\def\sb@tilt{1}\fi     % loss (backward leaning)
 
-  \def\sb@upperend{\soccerbar@height{#3}}   % table look-up of y-level for this number of goals
-  \def\sb@lowerend{-\soccerbar@height{#4}}
-  \ifnum\sb@tilt=0\relax\else               % clip tilted lines, shorten for outline style
-    \clip[overlay] (-2,{\sb@lowerend+0.2*(1-#1)}) rectangle (2,{\sb@upperend-0.2*(1-#1)});
+  % basic level (with correction for zero line alignment
+  \def\sb@upperend{0.5*\ifdim#3pt<0.5pt\soccerbar@zerolinewidth\else\soccerbar@height{#3}ex\fi}
+  \def\sb@lowerend{-0.5*\ifdim#4pt<0.5pt\soccerbar@zerolinewidth\else\soccerbar@height{#4}ex\fi}
+
+  % offset for outlining
+  \def\sb@offset{\ifdim#1pt<1pt\soccerbar@zerolinewidth\else0\fi}
+    
+  \ifnum\sb@tilt=0\relax\else               % clip tilted lines, shortened for outline style
+    \clip[overlay] (-2,{\sb@lowerend+\sb@offset}) rectangle (2,{\sb@upperend-\sb@offset});
   \fi
   \draw[
         rotate around={\sb@tilt*\soccerbar@slant:(0,0)},
@@ -142,17 +149,30 @@
 }
 
 
+% -- TikZ pic for a single match result
 \tikzset{pics/score/.style n args={3}{code={%
-  % #1, #2: goals for / against
-  %     #3: 0 if match was played at home
-  \ifnum#3>0 \@awaytrue\else\@awayfalse\fi
 
- \if\relax#1\relax % "goals for" empty => match not played
-   \soccerbar@putzerodot % alternative would be \soccerbar@zerodots{0}{0}
+ \def\@for{#1}
+ \def\@against{#2}
+
+ % -- away match?
+ \if\soccerbar@awaymark#3\relax\@awaytrue\else\@awayfalse\fi
+ \if@away 
+   \def\@for{#2}
+   \def\@against{#1}
+ \fi
+
+ \def\@color{.}
+ \if@away\if@outlined\relax\else\def\@color{.\sb@colormodifier}\fi\fi
+
+ % -- empty score?
+ \if\relax\detokenize{#1}\relax % "goals for" empty => match not played
+   \soccerbar@putzerodot[\@color]
+   % \soccerbar@zerodots{0}{0}  % alternative with two dots
  \else
 
-  % -- dots for scoreless sides?
-  \soccerbar@zerodots{#1}{#2}
+  % -- any dots for scoreless sides?
+  \soccerbar@zerodots[\@color]{\@for}{\@against}
 
   % -- goalless draw?
   \@goallessfalse
@@ -164,18 +184,18 @@
 
   % -- dot for goalless draw, line otherwise
   \if@goalless
-    \soccerbar@dot{.}
+    \soccerbar@dot{\@color}
     \if@outlined\if@away
       \soccerbar@dot[0.5]{white}      % !!! some time in the future this should be transparent
     \fi\fi
   \else
-    \soccerbar@line{.}{#1}{#2}
+    \soccerbar@line{\@color}{\@for}{\@against}
     \if@outlined\if@away
-      \soccerbar@line[0.3]{white}{#1}{#2} % !!! some time in the future this should be transparent
+      \soccerbar@line[0.3]{white}{\@for}{\@against}  % !!! (see above)
     \fi\fi
   \fi
 
- \fi % not yet played (i.e., #1 empty)
+ \fi % match not yet played (i.e., #1 empty)
 }}}
 
 
@@ -186,14 +206,14 @@
 % \home[color]{goals for}{goals against}
 % \away[color]{goals against}{goals for}
 
-\newcommand{\@score}[4]
+\newcommand{\sb@envscore}[4][.]
 {\path (soccerbar@end) ++(\soccerbar@spacing,0)
        pic[color=#1] {score={#2}{#3}{#4}}
        coordinate (soccerbar@end);
 }
 
-\providecommand{\home}[3][.]{\@score{#1}{#2}{#3}{0}}
-\providecommand{\away}[3][.]{\@score{#1\sb@awaycolor}{#3}{#2}{1}}
+\providecommand{\home}[3][.]{\sb@envscore[#1]{#2}{#3}{}}
+\providecommand{\away}[3][.]{\sb@envscore[#1]{#2}{#3}{\soccerbar@awaymark}}
 \let\score\home
 
 \newenvironment{soccerbarenv}[1][.]
@@ -202,17 +222,20 @@
    \coordinate (soccerbar@end) at (\soccerbar@padding,0);
 }
 {%
-   \path (soccerbar@end) ++(\soccerbar@spacing,0) ++(\soccerbar@padding,0) coordinate (soccerbar@end);
-   \def\sb@twogoals{\soccerbar@height{2}}
+   \path (soccerbar@end)
+         ++(\soccerbar@spacing,0)
+         ++(\soccerbar@padding,0) coordinate (soccerbar@end);
+   \edef\sb@twogoals{\soccerbar@height{2}}
    \useasboundingbox (soccerbar@end) +(0,\sb@twogoals) rectangle (0,-\sb@twogoals);
 
    % -- add baseline(s)
    \begin{scope}[on background layer]
-    \draw[color=.,line width=\soccerbar@zerolinewidth*\soccerbar@thickness]
+    \draw[color=.,line width=\soccerbar@zerolinewidth]
       (0,0) -- (soccerbar@end);
 
     \if@twogoalline
-      \draw[color=.,line width=0.5*\soccerbar@zerolinewidth*\soccerbar@thickness]
+      \clip (soccerbar@end) +(0,\sb@twogoals) rectangle (0,-\sb@twogoals);
+      \draw[color=.,line width=\soccerbar@zerolinewidth]
         (soccerbar@end) +(0,\sb@twogoals) -- (0,\sb@twogoals)
         (soccerbar@end) +(0,-\sb@twogoals) -- (0,-\sb@twogoals);
     \fi
@@ -228,21 +251,15 @@
 % <score> = (2-1)  for win at home
 % <score> = (2-1)* for loss away
 
-% -- split scores into goals for and against, swap if starred (=away match)
-\def\soccerbar@score(#1-#2)#3\relax{%
-  \if\soccerbar@awaymark\detokenize{#3}
-    pic[color=.\sb@awaycolor] {score={#2}{#1}{1}} % away
-  \else
-    pic {score={#1}{#2}{0}} % home
-  \fi
-}
+% -- split scores into goals for and against, possibly away mark
+\def\sb@csscore(#1-#2)#3\relax{pic {score={#1}{#2}{#3}}}
 
 \providecommand{\soccerbar}[2][.]
 {\edef\soccerbar@matches{#2}%     % -- prepare argument for use in foreach
  \begin{soccerbarenv}[#1]
    \path[overlay] (soccerbar@end)
      \foreach \match in \soccerbar@matches 
-      { ++(\soccerbar@spacing,0) \expandafter\soccerbar@score\match\relax }
+      { ++(\soccerbar@spacing,0) \expandafter\sb@csscore\match\relax }
      coordinate (soccerbar@end)
    ;
  \end{soccerbarenv}%
