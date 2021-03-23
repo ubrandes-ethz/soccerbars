@@ -132,11 +132,17 @@
   \def\sb@upperend{0.5*\ifdim#3pt<0.5pt\soccerbar@zerolinewidth\else\soccerbar@height{#3}ex\fi}
   \def\sb@lowerend{-0.5*\ifdim#4pt<0.5pt\soccerbar@zerolinewidth\else\soccerbar@height{#4}ex\fi}
 
-  % offset for outlining
-  \def\sb@offset{\ifdim#1pt<1pt\soccerbar@zerolinewidth\else0\fi}
+  % offset for outlining (smaller at two-goal line)
+  \def\sb@offset{\ifdim#1pt<1pt\soccerbar@zerolinewidth\else0\fi}  % outlined?
+  \def\sb@upperoffset{\sb@offset%
+    \if@twogoalline\ifdim\soccerbar@height{#3}pt=\soccerbar@height{2}pt*0.5\fi\fi
+  }
+  \def\sb@loweroffset{\sb@offset% 
+    \if@twogoalline\ifdim\soccerbar@height{#4}pt=\soccerbar@height{2}pt*0.5\fi\fi
+  }
     
   \ifnum\sb@tilt=0\relax\else               % clip tilted lines, shortened for outline style
-    \clip[overlay] (-2,{\sb@lowerend+\sb@offset}) rectangle (2,{\sb@upperend-\sb@offset});
+    \clip[overlay] (-2,{\sb@lowerend+\sb@loweroffset}) rectangle (2,{\sb@upperend-\sb@upperoffset});
   \fi
   \draw[
         rotate around={\sb@tilt*\soccerbar@slant:(0,0)},
